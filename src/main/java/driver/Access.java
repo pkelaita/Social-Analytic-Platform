@@ -1,21 +1,26 @@
 package driver;
 
 import java.io.Console;
-import java.util.Collections;
-import java.util.List;
 
-import org.apache.log4j.*;
+import org.bson.Document;
 
-import com.jModule.def.Command;
-import com.jModule.def.CommandLogic;
-import com.jModule.exec.Module;
-import com.jModule.exec.ConsoleClient;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoCursor;
+
+import com.jmodule.def.BoundedCommand;
+import com.jmodule.def.Command;
+import com.jmodule.def.CommandLogic;
+import com.jmodule.exec.Module;
+import com.jmodule.exec.ConsoleClient;
 
 import cache.DatabaseClient;
 import cache.MailClient;
 
 import javax.mail.AuthenticationFailedException;
 import javax.mail.MessagingException;
+
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Creates MailClient with given account information and adds the 10 most recent
@@ -28,14 +33,6 @@ public class Access {
 	private static String username;
 
 	public static void login() {
-
-		// disable logging, works in parallel with log4j.properties
-		@SuppressWarnings("unchecked")
-		List<Logger> loggers = Collections.<Logger>list(LogManager.getCurrentLoggers());
-		loggers.add(LogManager.getRootLogger());
-		for (Logger logger : loggers) {
-			logger.setLevel(Level.OFF);
-		}
 
 		Console c = System.console();
 		String password;
@@ -70,12 +67,15 @@ public class Access {
 			}
 			break;
 		}
-		DatabaseClient.connectToDatabase();
 	}
 
 	public static void main(String[] args) {
 
 		login();
+		
+		Logger mongoLogger = Logger.getLogger("org.mongodb");
+		mongoLogger.setLevel(Level.OFF);
+		DatabaseClient.connectToDatabase();
 
 		Command last = new Command("load", "Loads the last user-specified number of emails",
 				new CommandLogic(new String[] { "number of emails" }) {
@@ -87,6 +87,7 @@ public class Access {
 						} catch (NumberFormatException e) {
 							System.err.println("invalid input!");
 						}
+						System.out.println();
 					}
 				});
 
@@ -94,13 +95,67 @@ public class Access {
 
 			@Override
 			public void execute(String[] args) {
-				DatabaseClient.clearDB();
+				long num = DatabaseClient.clearDB();
+				System.out.println("Cleared " + num + " messages from database.\n");
 			}
 		});
+
+		Command view = new BoundedCommand("preview", "previews the emails in the database",
+				new CommandLogic(new String[] { "number of emails to preview" }) {
+
+					@Override
+					public void execute(String[] args) {
+						MongoCollection<Document> col = DatabaseClient.getCol();
+						int size = (int) col.count();
+						if (args.length == 1) {
+							try {
+								size = Integer.parseInt(args[0]);
+							} catch (NumberFormatException nfe) {
+								System.err.println("Invalid input!");
+								return;
+							}
+						}
+						int top = client.getSize();
+						
+						final int SPACING = 40;
+						
+						for (int i = top; i >= top - size; i--) {
+							Document filter = new Document().append("index", i);
+							MongoCursor<Document> cursor = col.find(filter).iterator();
+							while (cursor.hasNext()) {
+								Document mail = cursor.next();
+								String from = ((String) mail.get("from")).trim();
+								if (from.contains("<")) {
+									from = from.substring(0, from.indexOf('<') - 1);
+								}
+								if (from.length() > SPACING - 3) {
+									from = from.substring(0, SPACING - 3);
+								}
+								String buffer = "";
+								for (int s = 0; s < SPACING - from.length(); s++) {
+									buffer += " ";
+								}
+								from += buffer;
+								
+								String subject = (String) mail.get("subject");
+								if (subject.length() > 80) {
+									subject = subject.substring(0, 80) + "...";
+								}
+
+								System.out.print(mail.get("index") + "   ");
+								System.out.println("From: " + from + "Subject: " + subject);
+							}
+						}
+						System.out.println();
+					}
+
+				}, 0, 1);
+		view.addReference("view");
 
 		Module main = new Module("");
 		main.addCommand(last);
 		main.addCommand(clear);
+		main.addCommand(view);
 		main.appendHelpPage("\nUsername: " + username);
 
 		ConsoleClient console = new ConsoleClient("Data Platform", main);
