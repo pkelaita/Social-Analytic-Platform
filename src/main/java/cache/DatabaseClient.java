@@ -16,8 +16,8 @@ import com.mongodb.client.MongoDatabase;
  */
 public class DatabaseClient {
 
-	private static final String DATABASE_NAME = "EMAIL_DB";
-	private static final String COLLECTION_NAME = "MESSAGES";
+	private static final String DATABASE_NAME = "KELAITA_DB";
+	private static final String COLLECTION_NAME = "EMAIL";
 	private static final int DEFAULT_PORT = 27017;
 
 	protected static MongoDatabase database;
