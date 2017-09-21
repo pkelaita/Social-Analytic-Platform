@@ -30,7 +30,7 @@ public class DatabaseClient {
 	 */
 	public static void connectToDatabase() {
 
-		System.out.println("\nConnecting to database...");
+		System.out.println("Connecting to database...");
 
 		// check connection
 		MongoClient ping = new MongoClient();
@@ -47,7 +47,7 @@ public class DatabaseClient {
 
 		// creates Collection
 		collection = database.getCollection(COLLECTION_NAME);
-		System.out.println("Database connection successful @ " + DATABASE_NAME + "." + COLLECTION_NAME);
+		System.out.println("Database connection successful @ " + DATABASE_NAME + "." + COLLECTION_NAME + "\n");
 
 	}
 
@@ -61,10 +61,10 @@ public class DatabaseClient {
 	 *            the number of recent messages to add to databse
 	 */
 	public static void addLast(Message[] messages, int last) {
-		System.out.println("\nAdding emails to database...");
+		System.out.println("Adding emails to database...");
 		int done = 0;
 		for (int i = messages.length - 1; i > messages.length - last - 1; i--) {
-			collection.insertOne(new MailContent(messages[i], i).toBson());
+			collection.insertOne(new MailContent(messages[i], i, false).toBson());
 
 			done++;
 			printProgressBar(done, last);

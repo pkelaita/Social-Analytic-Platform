@@ -27,6 +27,8 @@ public class MailContent {
 	private String from;
 	private String body;
 
+	private boolean loadBody;
+
 	/**
 	 * Constructor. Grabs properties from Javamail messages and stores their info in
 	 * Java-native formats
@@ -37,7 +39,8 @@ public class MailContent {
 	 *            known index of message in folder, useful for parsing error
 	 *            messages
 	 */
-	public MailContent(Message email, int index) {
+	public MailContent(Message email, int index, boolean loadBody) {
+		this.loadBody = loadBody;
 		this.index = index;
 
 		try {
@@ -50,7 +53,9 @@ public class MailContent {
 				from += a + "\t";
 			}
 			try {
-				body = parseBody(email, index);
+				if (loadBody) {
+					body = parseBody(email, index);
+				}
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
@@ -142,20 +147,20 @@ public class MailContent {
 		doc.append("date", date.toString());
 		doc.append("subject", subject);
 		doc.append("from", from);
-		doc.append("body", body);
+		if (loadBody) {
+			doc.append("body", body);
+		}
 		return doc;
 	}
 
 	/**
-	 * Displays mail content in a user-friendly format
+	 * Displays mail header in a user-friendly format
 	 */
-	@Override
-	public String toString() {
+	public String getHeader() {
 		String out = "Email index: " + index;
 		out += "\nDate: " + date;
 		out += "\nSubject: " + subject;
 		out += "\nFrom: " + from;
-		out += "\nBody:\n" + body;
 		return out;
 	}
 

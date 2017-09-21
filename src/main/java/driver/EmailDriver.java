@@ -1,51 +1,52 @@
 package driver;
 
 import java.io.Console;
-
-import org.bson.Document;
-
-import com.mongodb.client.MongoCollection;
-import com.mongodb.client.MongoCursor;
-
-import com.jmodule.def.BoundedCommand;
-import com.jmodule.def.Command;
-import com.jmodule.def.CommandLogic;
-import com.jmodule.exec.Module;
-import com.jmodule.exec.ConsoleClient;
-
-import cache.DatabaseClient;
-import cache.MailClient;
+import java.util.ArrayList;
 
 import javax.mail.AuthenticationFailedException;
 import javax.mail.MessagingException;
 
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import com.jmodule.def.BoundedCommand;
+import com.jmodule.def.Command;
+import com.jmodule.def.CommandLogic;
+
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoCursor;
+
+import org.bson.Document;
+
+import cache.DatabaseClient;
+import cache.MailClient;
+import cache.MailContent;
 
 /**
- * Creates MailClient with given account information and adds the 10 most recent
- * messages to database
+ * Sets up the commands for the email module
  * 
  * @author Pierce Kelaita
  */
-public class Access {
+public class EmailDriver {
+
 	private static MailClient client;
 	private static String username;
+	private static String password;
 	private static boolean emailLogin = false;
-	
+
 	private final static String loginErrorMessage = "Error: please log in to your email first!\n";
 
-	public static void login() {
+	private static void fetch(String host, String mailStoreType)
+			throws MessagingException, AuthenticationFailedException {
+		System.out.println("Updating inbox...");
+		client = new MailClient(host, mailStoreType, username, password); // imap.gmail.com, imaps // myuwid.deskmail.washington.edu
+		client.retrieveMessages();
+	}
+
+	private static void login() {
 
 		Console c = System.console();
-		String password;
 
 		while (true) {
 
 			try {
-				String host = "imap.gmail.com";
-				String mailStoreType = "imaps";
-
 				System.out.print("Enter email: ");
 				username = c.readLine();
 				if (username.length() == 0) {
@@ -58,11 +59,10 @@ public class Access {
 					password += ch;
 				}
 
-				client = new MailClient(host, mailStoreType, username, password);
-				client.retrieveMessages();
+				fetch("imap.gmail.com", "imaps");
 
 			} catch (AuthenticationFailedException e) {
-				System.out.println("Wrong password!");
+				System.out.println("Wrong username or password!\n");
 				continue;
 			} catch (MessagingException e) {
 				e.printStackTrace();
@@ -72,11 +72,9 @@ public class Access {
 		}
 	}
 
-	public static void main(String[] args) {
+	public static ArrayList<Command> getCommands() {
+		ArrayList<Command> commands = new ArrayList<>();
 
-		Logger mongoLogger = Logger.getLogger("org.mongodb");
-		mongoLogger.setLevel(Level.OFF);
-		
 		Command login = new Command("account", "Log in or log out of your email account", new CommandLogic() {
 
 			@Override
@@ -98,19 +96,19 @@ public class Access {
 						default:
 							loop = true;
 						}
-						
+
 					}
 				} else {
 					login();
 					DatabaseClient.connectToDatabase();
 					emailLogin = true;
 				}
-				
+
 			}
-			
+
 		});
 		login.addReference("acc");
-				
+
 		Command last = new Command("load", "Loads the last user-specified number of emails",
 				new CommandLogic(new String[] { "number of emails" }) {
 
@@ -121,9 +119,14 @@ public class Access {
 							return;
 						}
 						try {
+							fetch("imap.gmail.com", "imaps");
 							DatabaseClient.addLast(client.getMessages(), Integer.parseInt(args[0]));
 						} catch (NumberFormatException e) {
 							System.err.println("invalid input!");
+						} catch (AuthenticationFailedException e) {
+							// This should never happen
+						} catch (MessagingException e) {
+							e.printStackTrace();
 						}
 						System.out.println();
 					}
@@ -196,35 +199,38 @@ public class Access {
 
 		}, 0, 1);
 		view.addReference("view");
-		view.resetUsage("Usage: ~$ preview [number of emails to preview]");
-		view.appendUsage("    OR ~$ view ~");
-		
-		Module home = new Module("home");
+		view.resetUsage("Usage: ~$ preview [number of emails]");
+		view.appendUsage("       OR view ~");
 
-		Module email = new Module("email");
-		email.addCommand(login);
-		email.addCommand(last);
-		email.addCommand(clear);
-		email.addCommand(view);
-		email.appendHelpPage("\nUsername: " + username);
+		Command open = new Command("open", "Fetches a message at a given index and opens it",
+				new CommandLogic(new String[] { "index" }) {
 
-		ConsoleClient console = new ConsoleClient("Data Platform", home);
-		console.addModule(email);
+					@Override
+					public void execute(String[] args) {
+						if (!emailLogin) {
+							System.err.println(loginErrorMessage);
+							return;
+						}
+						int i = 0;
+						try {
+							i = Integer.parseInt(args[0]);
+						} catch (NumberFormatException nfe) {
+							System.err.println("Invalid input!");
+							return;
+						}
+						MailContent m = new MailContent(client.getEmail(i), i, true);
+						System.out.println(m.getHeader());
+						System.out.println("Body:\n" + m.getBody());
+					}
 
-		console.enableAlerts(true);
-		console.enableTabCompletion(true);
-		console.enableHistoryLogging(true);
-		console.setPromptDisplayName("data-platform-v0.0.1");
-		console.setPromptSeparator(">");
+				});
 
-		console.addShutdownHook(new Thread() {
-			@Override
-			public void run() {
-				DatabaseClient.closeMongoConnection();
-				System.out.println();
-			}
-		});
+		commands.add(login);
+		commands.add(last);
+		commands.add(clear);
+		commands.add(view);
+		commands.add(open);
 
-		console.runConsole();
+		return commands;
 	}
 }
