@@ -17,7 +17,7 @@ import org.bson.Document;
 /**
  * Parses and stores Javamail properties
  * 
- * @author piercekelaita
+ * @author Pierce Kelaita
  */
 public class MailContent {
 

@@ -5,6 +5,7 @@ import javax.mail.Message;
 import org.bson.Document;
 
 import com.mongodb.MongoClient;
+import com.mongodb.MongoTimeoutException;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 
@@ -12,43 +13,60 @@ import com.mongodb.client.MongoDatabase;
  * Connects to Mongo database and adds specified emails. Must have a 'mongod'
  * instance running
  * 
- * @author piercekelaita
+ * @author Pierce Kelaita
  */
 public class DatabaseClient {
 
 	private static final String DATABASE_NAME = "KELAITA_DB";
-	private static final String COLLECTION_NAME = "EMAIL";
+	private static final String COLLECTION_NAME_1 = "HEADERS";
+	private static final String COLLECTION_NAME_2 = "EMAILS";
 	private static final int DEFAULT_PORT = 27017;
 
-	protected static MongoDatabase database;
-	protected static MongoCollection<Document> collection;
-	protected static MongoClient client;
+	private static MongoDatabase database;
+	private static MongoCollection<Document> headers;
+	private static MongoCollection<Document> emails;
+	private static MongoClient client;
 
 	/**
 	 * Pings Mongo to ensure a secure connection and retrieves information from the
 	 * database with the specified default information
 	 */
-	public static void connectToDatabase() {
+	public static void connectToDatabase() throws MongoTimeoutException {
 
 		System.out.println("Connecting to database...");
 
 		// check connection
-		MongoClient ping = new MongoClient();
-		MongoDatabase db = ping.getDatabase("ping");
-		db.drop();
-		ping.close();
+		MongoClient pc = new MongoClient("localhost", DEFAULT_PORT);
+		System.out.println(pc.listDatabaseNames().first());
+		pc.close();
 
-		// connects with server
+		// connect to database and grab collections
 		client = new MongoClient("localhost", DEFAULT_PORT);
 		System.out.println("Server connection successful @ localhost:" + DEFAULT_PORT);
-
-		// connects with Database
 		database = client.getDatabase(DATABASE_NAME);
+		headers = database.getCollection(COLLECTION_NAME_1);
+		System.out.println("Database connection successful @ " + DATABASE_NAME + "." + COLLECTION_NAME_1);
+		emails = database.getCollection(COLLECTION_NAME_2);
+		System.out.println("Database connection successful @ " + DATABASE_NAME + "." + COLLECTION_NAME_2 + "\n");
 
-		// creates Collection
-		collection = database.getCollection(COLLECTION_NAME);
-		System.out.println("Database connection successful @ " + DATABASE_NAME + "." + COLLECTION_NAME + "\n");
+	}
 
+	/**
+	 * Returns a collection of emails with only headers
+	 * 
+	 * @return headers
+	 */
+	public static MongoCollection<Document> getHeadersCollection() {
+		return headers;
+	}
+
+	/**
+	 * Returns a colleciton of emails with headers and bodies
+	 * 
+	 * @return emails
+	 */
+	public static MongoCollection<Document> getEmailsCollection() {
+		return emails;
 	}
 
 	/**
@@ -64,7 +82,7 @@ public class DatabaseClient {
 		System.out.println("Adding emails to database...");
 		int done = 0;
 		for (int i = messages.length - 1; i > messages.length - last - 1; i--) {
-			collection.insertOne(new MailContent(messages[i], i, false).toBson());
+			headers.insertOne(new MailContent(messages[i], i, false).toBson());
 
 			done++;
 			printProgressBar(done, last);
@@ -85,44 +103,21 @@ public class DatabaseClient {
 		for (; i < bar_length; i++) {
 			System.out.print(" ");
 		}
-		
+
 		long percOut = Math.round(perc * 100);
 		System.out.print("] " + percOut + "% [" + done + "/" + total + "]");
 	}
 
-	/**
-	 * Clears the collection
-	 * 
-	 * @return the number of messages cleared from the database collection
-	 */
 	public static long clearDB() {
-		long removed = collection.count();
-		collection.deleteMany(new Document());
+		long removed = headers.count();
+		headers.deleteMany(new Document());
 		return removed;
 	}
 
-	/**
-	 * Getter method for the MongoDB database.
-	 * 
-	 * @return the MongoDatabase being used
-	 */
 	public static MongoDatabase getDB() {
 		return database;
 	}
 
-	/**
-	 * Getter method for MongoDB collection.
-	 * 
-	 * @return the MongoCollection being used
-	 */
-	public static MongoCollection<Document> getCol() {
-		return collection;
-	}
-
-	/**
-	 * Closes the MongoClient connection opened in connectToDatabase() to prevent
-	 * possible resource leaks
-	 */
 	public static void closeMongoConnection() {
 		client.close();
 	}

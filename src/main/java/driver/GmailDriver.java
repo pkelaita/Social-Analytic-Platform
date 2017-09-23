@@ -4,6 +4,7 @@ import java.io.Console;
 import java.util.ArrayList;
 
 import javax.mail.AuthenticationFailedException;
+import javax.mail.Message;
 import javax.mail.MessagingException;
 
 import com.jmodule.def.BoundedCommand;
@@ -16,7 +17,7 @@ import com.mongodb.client.MongoCursor;
 import org.bson.Document;
 
 import cache.DatabaseClient;
-import cache.MailClient;
+import cache.GmailClient;
 import cache.MailContent;
 
 /**
@@ -24,19 +25,18 @@ import cache.MailContent;
  * 
  * @author Pierce Kelaita
  */
-public class EmailDriver {
+public class GmailDriver {
 
-	private static MailClient client;
+	private static GmailClient client;
 	private static String username;
 	private static String password;
 	private static boolean emailLogin = false;
 
 	private final static String loginErrorMessage = "Error: please log in to your email first!\n";
 
-	private static void fetch(String host, String mailStoreType)
-			throws MessagingException, AuthenticationFailedException {
+	private static void fetch() throws MessagingException, AuthenticationFailedException {
 		System.out.println("Updating inbox...");
-		client = new MailClient(host, mailStoreType, username, password); // imap.gmail.com, imaps // myuwid.deskmail.washington.edu
+		client = new GmailClient(username, password);
 		client.retrieveMessages();
 	}
 
@@ -59,7 +59,7 @@ public class EmailDriver {
 					password += ch;
 				}
 
-				fetch("imap.gmail.com", "imaps");
+				fetch();
 
 			} catch (AuthenticationFailedException e) {
 				System.out.println("Wrong username or password!\n");
@@ -119,7 +119,7 @@ public class EmailDriver {
 							return;
 						}
 						try {
-							fetch("imap.gmail.com", "imaps");
+							fetch();
 							DatabaseClient.addLast(client.getMessages(), Integer.parseInt(args[0]));
 						} catch (NumberFormatException e) {
 							System.err.println("invalid input!");
@@ -153,7 +153,7 @@ public class EmailDriver {
 					System.err.println(loginErrorMessage);
 					return;
 				}
-				MongoCollection<Document> col = DatabaseClient.getCol();
+				MongoCollection<Document> col = DatabaseClient.getHeadersCollection();
 				int size = (int) col.count();
 				if (args.length == 1) {
 					try {
@@ -165,33 +165,16 @@ public class EmailDriver {
 				}
 
 				int top = client.getSize();
-				final int SPACING = 40;
 
 				for (int i = top; i >= top - size; i--) {
 					Document filter = new Document().append("index", i);
 					MongoCursor<Document> cursor = col.find(filter).iterator();
 					while (cursor.hasNext()) {
 						Document mail = cursor.next();
-						String from = ((String) mail.get("from")).trim();
-						if (from.contains("<")) {
-							from = from.substring(0, from.indexOf('<') - 1);
-						}
-						if (from.length() > SPACING - 3) {
-							from = from.substring(0, SPACING - 3);
-						}
-						String buffer = "";
-						for (int s = 0; s < SPACING - from.length(); s++) {
-							buffer += " ";
-						}
-						from += buffer;
-
+						String from = ((String) mail.get("from"));
 						String subject = (String) mail.get("subject");
-						if (subject.length() > 85) {
-							subject = subject.substring(0, 82) + "...";
-						}
-
-						System.out.print(mail.get("index") + "   ");
-						System.out.println("From: " + from + "Subject: " + subject);
+						int index = (int) mail.get("index");
+						printFormattedHeader(index, from, subject);
 					}
 				}
 				System.out.println();
@@ -214,23 +197,74 @@ public class EmailDriver {
 						int i = 0;
 						try {
 							i = Integer.parseInt(args[0]);
+							MailContent m = new MailContent(client.getEmail(i), i, true);
+							System.out.println(m.getHeader());
+							System.out.println("Body:\n" + m.getBody());
 						} catch (NumberFormatException nfe) {
 							System.err.println("Invalid input!");
 							return;
+						} catch (IndexOutOfBoundsException ioob) {
+							System.err.println("No message exists at index " + i);
 						}
-						MailContent m = new MailContent(client.getEmail(i), i, true);
-						System.out.println(m.getHeader());
-						System.out.println("Body:\n" + m.getBody());
 					}
 
 				});
+
+		Command grep = new Command("grep", "greps for sender", new CommandLogic(new String[] { "sequence" }) {
+
+			@Override
+			public void execute(String[] args) {
+				if (!emailLogin) {
+					System.err.println(loginErrorMessage);
+					return;
+				}
+				for (int i = client.getSize() - 1; i >= 25000; i--) {
+					try {
+						Message m = client.getEmail(i);
+						String from = m.getFrom()[0].toString();
+						String subject = m.getSubject();
+						if (from.toLowerCase().contains(args[0])) {
+							printFormattedHeader(i, from, subject);
+						}
+					} catch (MessagingException e) {
+						e.printStackTrace();
+					}
+				}
+				System.out.println();
+			}
+		});
 
 		commands.add(login);
 		commands.add(last);
 		commands.add(clear);
 		commands.add(view);
 		commands.add(open);
+		commands.add(grep);
 
 		return commands;
+	}
+
+	private static void printFormattedHeader(int index, String from, String subject) {
+		final int SPACING = 40;
+
+		from = from.trim();
+		if (from.contains("<")) {
+			from = from.substring(0, from.indexOf('<') - 1);
+		}
+		if (from.length() > SPACING - 3) {
+			from = from.substring(0, SPACING - 3);
+		}
+		String buffer = "";
+		for (int s = 0; s < SPACING - from.length(); s++) {
+			buffer += " ";
+		}
+		from += buffer;
+
+		if (subject.length() > 85) {
+			subject = subject.substring(0, 82) + "...";
+		}
+
+		System.out.print(index + "   ");
+		System.out.println("From: " + from + "Subject: " + subject);
 	}
 }

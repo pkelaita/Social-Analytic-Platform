@@ -12,9 +12,9 @@ import javax.mail.MessagingException;
  * Utilizes the Javamail API to connect with POP3 mail server and access the
  * messages in the inbox
  * 
- * @author piercekelaita
+ * @author Pierce Kelaita
  */
-public class MailClient {
+public class GmailClient {
 
 	private Message[] messages;
 	private Store emailStore;
@@ -28,15 +28,15 @@ public class MailClient {
 	 * @param password
 	 * @throws MessagingException
 	 */
-	public MailClient(String host, String storeType, String user, String password) throws MessagingException {
+	public GmailClient(String user, String password) throws MessagingException {
 
 		Properties properties = new Properties();
-		properties.put("mail.pop3.host", host);
+		properties.put("mail.pop3.host", "imap.gmail.com");
 		properties.put("mail.pop3.port", "995");
 		properties.put("mail.pop3.starttls.enable", "true");
 		Session emailSession = Session.getDefaultInstance(properties);
-		emailStore = emailSession.getStore(storeType);
-		emailStore.connect(host, user, password);
+		emailStore = emailSession.getStore("imaps");
+		emailStore.connect("imap.gmail.com", user, password);
 
 	}
 

@@ -18,22 +18,22 @@ public class App {
 	public static void main(String[] args) {
 
 		Logger mongoLogger = Logger.getLogger("org.mongodb");
-		mongoLogger.setLevel(Level.OFF);
+		mongoLogger.setLevel(Level.SEVERE);
 
-		Module email = new Module("email");
-		for (Command c : EmailDriver.getCommands()) {
-			email.addCommand(c);
+		Module gmail = new Module("gmail");
+		for (Command c : GmailDriver.getCommands()) {
+			gmail.addCommand(c);
 		}
 
 		ConsoleClient console = new ConsoleClient("Data Platform", new Module("home"));
-		console.addModule(email);
+		console.addModule(gmail);
 
 		console.enableAlerts(true);
 		console.enableTabCompletion(true);
 		console.enableHistoryLogging(true);
-		console.enableHistoryIndexDisplay(true);
 		console.setPromptDisplayName("data-platform-v0.0.1");
-		console.setModuleSeparator(":");
+		console.setModuleSeparator("/");
+		console.setPromptSeparator(">");
 
 		console.addShutdownHook(new Thread() {
 			@Override
